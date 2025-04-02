@@ -2,17 +2,18 @@ import { Request, Response } from 'express';
 import Order, { IOrder } from '../models/Order';
 import nodemailer from 'nodemailer';  // Import nodemailer
 
-// Set up Nodemailer transporter for cPanel email
 const transporter = nodemailer.createTransport({
-  host: 'mail.medstuff.pk', // Your cPanel mail server
-  port: 465, // Use port 465 for SSL or 587 for TLS
-  secure: true, // Use SSL/TLS encryption
+  host: "mail.medstuff.pk",
+  port: 2525, // Change to 2525 if 465/587 is blocked
+  secure: false, // Set to false if using port 2525
   auth: {
-    user: 'order.confirmation@medstuff.pk', // Your full cPanel email address
-    pass: 'Aliabbas321@' // Your cPanel email password
-  }
+    user: "order.confirmation@medstuff.pk",
+    pass: "Aliabbas321@", // Store this in environment variables
+  },
+  tls: {
+    rejectUnauthorized: false, // Helps avoid TLS issues
+  },
 });
-
 export const getOrders = async (req: Request, res: Response) => {
   try {
     const orders = await Order.find({}).sort({ createdAt: -1 });
