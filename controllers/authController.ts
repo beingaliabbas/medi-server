@@ -1,12 +1,10 @@
-
-import { Request, Response } from 'express';
+import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import Admin from '../models/Admin';
 
-const JWT_SECRET = 'medishopper-secret-key'; // In production, use environment variable
+const JWT_SECRET = 'medishopper-secret-key'; // Still hardcoded - consider moving to config file
 
-// Initialize admin user
 export const initAdminUser = async () => {
   try {
     const adminCount = await Admin.countDocuments();
@@ -14,42 +12,31 @@ export const initAdminUser = async () => {
     if (adminCount === 0) {
       const admin = new Admin({
         username: 'admin',
-        password: 'admin123' // Will be hashed by pre-save hook
+        password: 'admin123'
       });
-      
       await admin.save();
       console.log('Admin user created successfully');
     }
-  } catch (error) {
-    console.error('Error initializing admin user:', error);
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error('Error initializing admin user:', errorMessage);
   }
 };
 
-// Admin login
 export const loginAdmin = async (req: Request, res: Response) => {
   try {
     const { username, password } = req.body;
     
-    // Validation
     if (!username || !password) {
       return res.status(400).json({ message: 'Please provide username and password' });
     }
     
-    // Find admin by username
     const admin = await Admin.findOne({ username });
+    if (!admin) return res.status(401).json({ message: 'Invalid credentials' });
     
-    if (!admin) {
-      return res.status(401).json({ message: 'Invalid credentials' });
-    }
-    
-    // Compare password
     const isPasswordValid = await admin.comparePassword(password);
+    if (!isPasswordValid) return res.status(401).json({ message: 'Invalid credentials' });
     
-    if (!isPasswordValid) {
-      return res.status(401).json({ message: 'Invalid credentials' });
-    }
-    
-    // Generate JWT token
     const token = jwt.sign(
       { id: admin._id, username: admin.username },
       JWT_SECRET,
@@ -58,44 +45,30 @@ export const loginAdmin = async (req: Request, res: Response) => {
     
     res.json({
       token,
-      user: {
-        id: admin._id,
-        username: admin.username
-      }
+      user: { id: admin._id, username: admin.username }
     });
-  } catch (error) {
-    console.error('Error during login:', error);
-    res.status(500).json({ message: 'Server Error', error: error.message });
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Server Error';
+    console.error('Error during login:', errorMessage);
+    res.status(500).json({ message: 'Server Error', error: errorMessage });
   }
 };
 
-// Verify JWT middleware
-export const protect = async (req: Request, res: Response, next: Function) => {
+export const protect = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    let token;
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) return res.status(401).json({ message: 'Not authorized, no token' });
     
-    if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
-      token = req.headers.authorization.split(' ')[1];
-    }
-    
-    if (!token) {
-      return res.status(401).json({ message: 'Not authorized, no token' });
-    }
-    
-    // Verify token
     const decoded = jwt.verify(token, JWT_SECRET) as { id: string };
-    
-    // Get admin user
     const admin = await Admin.findById(decoded.id).select('-password');
     
-    if (!admin) {
-      return res.status(401).json({ message: 'Not authorized, invalid token' });
-    }
+    if (!admin) return res.status(401).json({ message: 'Not authorized, invalid token' });
     
     req.user = admin;
     next();
-  } catch (error) {
-    console.error('Auth error:', error);
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Authentication failed';
+    console.error('Auth error:', errorMessage);
     res.status(401).json({ message: 'Not authorized, token failed' });
   }
 };
