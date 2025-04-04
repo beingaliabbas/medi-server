@@ -51,22 +51,21 @@ export const createOrder = async (req: Request, res: Response) => {
 
     // Send data to PHP mailer endpoint
     try {
-      const response = await axios.post('https://medstuff.pk/mailer.php', {
-        to: customerInfo.email,
-        name: customerInfo.fullName,
-        orderNumber,
-        items: orderItems,
-        total
-      });
-      console.log('Email send response:', response.data); // Log the successful response
-    } catch (emailError: any) {
-      console.error('Email send failed via mailer.php:', emailError.message);
-      console.error('Error details:', emailError.response ? emailError.response.data : emailError); // Log the full error
-      return res.status(500).json({
-        message: 'Order created but email sending failed',
-        error: emailError.message
-      });
-    }
+  const emailResponse = await axios.post('https://medstuff.pk/mailer.php', {
+    to: customerInfo.email,
+    name: customerInfo.fullName,
+    orderNumber,
+    items: orderItems,
+    total
+  });
+  console.log("Email send response:", emailResponse.data);  // Log the response from the email service
+} catch (emailError: any) {
+  console.error('Email send failed via mailer.php:', emailError.response ? emailError.response.data : emailError.message);
+  return res.status(500).json({
+    message: 'Order created but email sending failed',
+    error: emailError.message
+  });
+}
 
     res.status(201).json(createdOrder);
   } catch (error: unknown) {
