@@ -1,19 +1,7 @@
 import { Request, Response } from 'express';
-import Order, { IOrder } from '../models/Order';
-import nodemailer from 'nodemailer';  // Import nodemailer
+import Order from '../models/Order';
+import axios from 'axios';
 
-const transporter = nodemailer.createTransport({
-  host: "mail.medstuff.pk",
-  port: 2525, // Change to 2525 if 465/587 is blocked
-  secure: false, // Set to false if using port 2525
-  auth: {
-    user: "order.confirmation@medstuff.pk",
-    pass: "Aliabbas321@", // Store this in environment variables
-  },
-  tls: {
-    rejectUnauthorized: false, // Helps avoid TLS issues
-  },
-});
 export const getOrders = async (req: Request, res: Response) => {
   try {
     const orders = await Order.find({}).sort({ createdAt: -1 });
@@ -45,13 +33,12 @@ export const createOrder = async (req: Request, res: Response) => {
       return res.status(400).json({ message: 'Please provide all required fields' });
     }
 
-    // Explicitly type `items`
     const orderItems: { name: string; price: number; quantity: number }[] = items;
 
     const order = new Order({
       orderNumber,
       customerInfo,
-      items: orderItems, // Assign the typed items array
+      items: orderItems,
       paymentMethod,
       subtotal,
       shipping,
@@ -62,36 +49,24 @@ export const createOrder = async (req: Request, res: Response) => {
 
     const createdOrder = await order.save();
 
-    // Send email
-    const mailOptions = {
-      from: '"MedStuff" <order.confirmation@medstuff.pk>',
-      to: customerInfo.email,
-      subject: `Order Confirmation - ${orderNumber}`,
-      html: `
-        <html>
-          <body style="font-family: Arial, sans-serif; line-height: 1.6;">
-            <h2 style="color: #3e8e41;">Thank You for Your Order!</h2>
-            <p>Dear <strong>${customerInfo.fullName}</strong>,</p>
-            <p>Thank you for your order. Your order number is <strong>${orderNumber}</strong>.</p>
-            <h3 style="color: #3e8e41;">Order Details:</h3>
-            <ul>
-              ${orderItems.map((item) => `<li>${item.name} - Quantity: ${item.quantity} - Price: PKR ${item.price}</li>`).join('')}
-            </ul>
-            <p><strong>Total: PKR ${total}</strong></p>
-            <p>If you have any questions, feel free to contact us at <a href="mailto:order.confirmation@medstuff.pk">order.confirmation@medstuff.pk</a>.</p>
-            <p>Best regards,<br/>The MedStuff Team</p>
-          </body>
-        </html>
-      `
-    };
-
-    transporter.sendMail(mailOptions, (error, info) => {
-      if (error) {
-        console.error('Error sending email:', error);
-        return res.status(500).json({ message: 'Order created but email failed to send', error: error.message });
-      }
-      console.log('Email sent: ' + info.response);
-    });
+    // Send data to PHP mailer endpoint
+    try {
+      const response = await axios.post('https://medstuff.pk/mailer.php', {
+        to: customerInfo.email,
+        name: customerInfo.fullName,
+        orderNumber,
+        items: orderItems,
+        total
+      });
+      console.log('Email send response:', response.data); // Log the successful response
+    } catch (emailError: any) {
+      console.error('Email send failed via mailer.php:', emailError.message);
+      console.error('Error details:', emailError.response ? emailError.response.data : emailError); // Log the full error
+      return res.status(500).json({
+        message: 'Order created but email sending failed',
+        error: emailError.message
+      });
+    }
 
     res.status(201).json(createdOrder);
   } catch (error: unknown) {
